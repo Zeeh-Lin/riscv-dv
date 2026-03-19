@@ -73,9 +73,10 @@ class riscv_instr_sequence:
         self.is_main_program = is_main_program
         self.instr_stream.initialize_instr_list(self.instr_cnt)
         logging.info("Start generating {} instruction".format(len(self.instr_stream.instr_list)))
+        no_load_store = 0 if getattr(rcs, "cicc_allow_random_load_store", 0) else 1
         # Do not generate load/store instruction here
         # The load/store instruction will be inserted as directed instruction stream
-        self.instr_stream.gen_instr(no_branch = no_branch, no_load_store = 1,
+        self.instr_stream.gen_instr(no_branch = no_branch, no_load_store = no_load_store,
                                     is_debug_program = self.is_debug_program)
 
         # TODO Commenting for now as it is blocking sub_program

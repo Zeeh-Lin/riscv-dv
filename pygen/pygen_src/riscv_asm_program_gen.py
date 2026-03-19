@@ -56,6 +56,9 @@ class riscv_asm_program_gen:
         self.spf_val = vsc.rand_bit_t(32)
         self.dpf_val = vsc.rand_bit_t(64)
 
+    def use_cicc_runtime(self):
+        return bool(getattr(rcs, "cicc_simplified_runtime", 0))
+
     # ----------------------------------------------------------------------------------
     # Main function to generate the whole program
     # ----------------------------------------------------------------------------------
@@ -123,8 +126,11 @@ class riscv_asm_program_gen:
             to test_done section at the end of main_program, as the test_done
             will have moved to the beginning of the program
             """
-            self.instr_stream.extend(("{}la x{}, test_done".format(pkg_ins.indent, cfg.scratch_reg),
-                                      "{}jalr x0, x{}, 0".format(pkg_ins.indent, cfg.scratch_reg)))
+            if self.use_cicc_runtime():
+                self.instr_stream.append(pkg_ins.indent + "j test_done")
+            else:
+                self.instr_stream.extend(("{}la x{}, test_done".format(pkg_ins.indent, cfg.scratch_reg),
+                                          "{}jalr x0, x{}, 0".format(pkg_ins.indent, cfg.scratch_reg)))
             # Test done section
             # If PMP isn't supported, generate this in the normal location
             if(hart == 0 and not(rcs.support_pmp)):
@@ -229,7 +235,7 @@ class riscv_asm_program_gen:
                       sub_program_name, num_sub_program):
         if num_sub_program != 0:
             callstack_gen = riscv_callstack_gen()
-            self.callstack_gen.init(num_sub_program + 1)
+            callstack_gen.init(num_sub_program + 1)
             if callstack_gen.randomize():
                 idx = 0
                 # Insert the jump instruction based on the call stack
@@ -264,6 +270,9 @@ class riscv_asm_program_gen:
         self.instr_stream.extend((".include \"user_define.h\"", ".globl _start", ".section .text"))
         if cfg.disable_compressed_instr:
             self.instr_stream.append(".option norvc;")
+        if self.use_cicc_runtime():
+            self.gen_section("_start", ["j h0_start"])
+            return
         header_string.extend((".include \"user_init.s\"",
                               "csrr x5, {}".format(hex(privileged_reg_t.MHARTID))))
         for hart in range(cfg.num_of_harts):
@@ -276,6 +285,8 @@ class riscv_asm_program_gen:
 
     def gen_program_end(self, hart):
         if hart == 0:
+            if self.use_cicc_runtime():
+                return
             # Use write_tohost to terminate spike simulation
             self.gen_section("write_tohost", ["sw gp, tohost, t5"])
             self.gen_section("_exit", ["j write_tohost"])
@@ -336,6 +347,18 @@ class riscv_asm_program_gen:
     def gen_init_section(self, hart):
         init_string = pkg_ins.format_string(pkg_ins.get_label("init:", hart), pkg_ins.LABEL_STR_LEN)
         self.instr_stream.append(init_string)
+        if self.use_cicc_runtime():
+            data_base_hi = 2047
+            data_base_lo = 1281
+            for i in range(rcs.NUM_GPR):
+                if i == 0:
+                    continue
+                if i == cfg.sp:
+                    self.instr_stream.append("{}addi x{}, x0, 448".format(pkg_ins.indent, i))
+                    continue
+                self.instr_stream.append("{}addi x{}, x0, {}".format(pkg_ins.indent, i, data_base_hi))
+                self.instr_stream.append("{}addi x{}, x{}, {}".format(pkg_ins.indent, i, i, data_base_lo))
+            return
         if cfg.enable_floating_point:
             self.init_floating_point_gpr()
         self.init_gpr()
@@ -550,6 +573,9 @@ class riscv_asm_program_gen:
     def gen_test_done(self):
         self.instr_stream.extend((pkg_ins.format_string("test_done:", pkg_ins.LABEL_STR_LEN),
                                   pkg_ins.indent + "li gp, 1"))
+        if self.use_cicc_runtime():
+            self.instr_stream.append(pkg_ins.indent + "ebreak")
+            return
         if cfg.bare_program_mode:
             self.instr_stream.append(pkg_ins.indent + "j write_tohost")
         else:

@@ -339,7 +339,10 @@ def do_simulate(sim_cmd, simulator, test_list, cwd, sim_opts, seed_gen,
                         else:
                             cmd += test['gen_opts']
                     if not re.search("c", isa):
-                        cmd += "+disable_compressed_instr=1 "
+                        if simulator == "pyflow":
+                            cmd += " --disable_compressed_instr=1 "
+                        else:
+                            cmd += "+disable_compressed_instr=1 "
                     if lsf_cmd:
                         cmd_list.append(cmd)
                     else:
