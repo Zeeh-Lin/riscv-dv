@@ -28,6 +28,7 @@ riscv_instr_name_t unsupported_instr[] = {
     BLT, BGE, BLTU, BGEU,
     LB, LH, LBU, LHU,
     SB, SH,
+    JALR,
     SLTI, SLTIU, XORI, ANDI, SLLI, SRLI, SRAI,
     SLT, SLTU, XOR, SRA,
     NOP, FENCE, FENCE_I,

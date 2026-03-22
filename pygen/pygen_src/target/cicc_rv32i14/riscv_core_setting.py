@@ -16,6 +16,7 @@ from pygen_src.riscv_instr_pkg import (
     privileged_mode_t,
     riscv_instr_group_t,
     riscv_instr_name_t,
+    riscv_reg_t,
     satp_mode_t,
 )
 
@@ -38,6 +39,7 @@ unsupported_instr = [
     riscv_instr_name_t.LHU,
     riscv_instr_name_t.SB,
     riscv_instr_name_t.SH,
+    riscv_instr_name_t.JALR,
     riscv_instr_name_t.SLTI,
     riscv_instr_name_t.SLTIU,
     riscv_instr_name_t.XORI,
@@ -91,4 +93,28 @@ custom_csr = []
 # Used by the local wrapper in riscv_asm_program_gen.py to emit a CSR-free
 # single-hart runtime scaffold.
 cicc_simplified_runtime = 1
-cicc_allow_random_load_store = 1
+cicc_allow_random_load_store = 0
+cicc_reserved_data_regs = [
+    riscv_reg_t.S0,
+    riscv_reg_t.S1,
+    riscv_reg_t.A0,
+    riscv_reg_t.A1,
+]
+cicc_reserved_data_reg_init = {
+    riscv_reg_t.S0: 0x800010C8,
+    riscv_reg_t.S1: 0x800011C8,
+    riscv_reg_t.A0: 0x800014C8,
+    riscv_reg_t.A1: 0x800015C8,
+}
+cicc_reserved_data_reg_page = {
+    riscv_reg_t.S0: 0,
+    riscv_reg_t.S1: 0,
+    riscv_reg_t.A0: 1,
+    riscv_reg_t.A1: 1,
+}
+cicc_reserved_data_reg_offset = {
+    riscv_reg_t.S0: 0x80,
+    riscv_reg_t.S1: 0x180,
+    riscv_reg_t.A0: 0x80,
+    riscv_reg_t.A1: 0x180,
+}

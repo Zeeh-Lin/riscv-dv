@@ -66,6 +66,8 @@ class riscv_mem_access_stream(riscv_directed_instr_stream):
 
     # Use "la" instruction to initialize the base regiseter
     def add_rs1_init_la_instr(self, gpr, idx, base = 0):
+        if getattr(rcs, "cicc_simplified_runtime", 0):
+            return
         la_instr = riscv_pseudo_instr()
         la_instr.pseudo_instr_name = riscv_pseudo_instr_name_t.LA
         la_instr.rd = gpr

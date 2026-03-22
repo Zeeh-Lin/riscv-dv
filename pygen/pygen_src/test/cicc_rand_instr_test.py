@@ -13,6 +13,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 import logging
 import sys
 import time
+from importlib import import_module
 
 sys.path.append("pygen/")
 
@@ -22,6 +23,8 @@ from pygen_src.test.riscv_instr_base_test import (  # noqa: E402
 from pygen_src.riscv_instr_gen_config import cfg  # noqa: E402
 from pygen_src.riscv_utils import gen_config_table  # noqa: E402
 
+rcs = import_module("pygen_src.target." + cfg.argv.target + ".riscv_core_setting")
+
 
 class cicc_rand_instr_test(riscv_instr_base_test):
     def __init__(self):
@@ -30,16 +33,18 @@ class cicc_rand_instr_test(riscv_instr_base_test):
     def randomize_cfg(self):
         cfg.randomize()
         cfg.stack_len = 16
+        cfg.enable_misaligned_instr = 0
+        for reg in getattr(rcs, "cicc_reserved_data_regs", []):
+            if reg not in cfg.reserved_regs:
+                cfg.reserved_regs.append(reg)
         for region in cfg.mem_region:
             region.size_in_bytes = 1024
         logging.info("riscv_instr_gen_config is randomized")
         gen_config_table()
 
     def apply_directed_instr(self):
-        # Keep the test self-contained: load/store stays in the main random
-        # stream instead of relying on upstream directed streams that assume
-        # the full RV32I load/store set.
-        pass
+        self.asm.add_directed_instr_stream("riscv_load_store_rand_instr_stream", 80)
+        self.asm.add_directed_instr_stream("riscv_load_store_hazard_instr_stream", 80)
 
 
 start_time = time.time()

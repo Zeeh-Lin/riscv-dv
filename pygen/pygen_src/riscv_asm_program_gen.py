@@ -348,16 +348,28 @@ class riscv_asm_program_gen:
         init_string = pkg_ins.format_string(pkg_ins.get_label("init:", hart), pkg_ins.LABEL_STR_LEN)
         self.instr_stream.append(init_string)
         if self.use_cicc_runtime():
+            current_pc = 0x80000004
             data_base_hi = 2047
             data_base_lo = 1281
+            reserved_init = getattr(rcs, "cicc_reserved_data_reg_init", {})
             for i in range(rcs.NUM_GPR):
                 if i == 0:
                     continue
                 if i == cfg.sp:
                     self.instr_stream.append("{}addi x{}, x0, 448".format(pkg_ins.indent, i))
+                    current_pc += 4
+                    continue
+                target_addr = None
+                for reg, addr in reserved_init.items():
+                    if i == reg.value:
+                        target_addr = addr
+                        break
+                if target_addr is not None:
+                    current_pc = self.emit_cicc_abs_gpr_init(i, target_addr, current_pc)
                     continue
                 self.instr_stream.append("{}addi x{}, x0, {}".format(pkg_ins.indent, i, data_base_hi))
                 self.instr_stream.append("{}addi x{}, x{}, {}".format(pkg_ins.indent, i, i, data_base_lo))
+                current_pc += 8
             return
         if cfg.enable_floating_point:
             self.init_floating_point_gpr()
@@ -446,6 +458,18 @@ class riscv_asm_program_gen:
     def gen_dummy_csr_write(self):
         # TODO
         pass
+
+    def emit_cicc_abs_gpr_init(self, gpr, target_addr, current_pc):
+        self.instr_stream.append("{}jal x{}, 1f".format(pkg_ins.indent, gpr))
+        current_pc += 4
+        self.instr_stream.append("1:")
+        delta = target_addr - current_pc
+        while delta > 0:
+            step = min(delta, 2047)
+            self.instr_stream.append("{}addi x{}, x{}, {}".format(pkg_ins.indent, gpr, gpr, step))
+            current_pc += 4
+            delta -= step
+        return current_pc
 
     # Initialize general purpose registers with random value
     def init_gpr(self):

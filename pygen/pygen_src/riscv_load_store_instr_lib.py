@@ -77,6 +77,15 @@ class riscv_load_store_base_instr_stream(riscv_mem_access_stream):
         self.base in vsc.rangelist(vsc.rng(0, self.max_load_store_offset - 1))
 
     def randomize_offset(self):
+        if getattr(rcs, "cicc_simplified_runtime", 0):
+            offsets = list(range(-16, 17, 4))
+            self.offset = [0] * self.num_load_store
+            self.addr = [0] * self.num_load_store
+            for i in range(self.num_load_store):
+                offset_ = random.choice(offsets)
+                self.offset[i] = offset_
+                self.addr[i] = self.base + offset_
+            return
         addr_ = vsc.rand_int32_t()
         offset_ = vsc.rand_int32_t()
         self.offset = [0] * self.num_load_store
@@ -102,6 +111,22 @@ class riscv_load_store_base_instr_stream(riscv_mem_access_stream):
 
     def pre_randomize(self):
         super().pre_randomize()
+        if getattr(rcs, "cicc_simplified_runtime", 0):
+            base_regs = list(getattr(rcs, "cicc_reserved_data_regs", []))
+            page_map = getattr(rcs, "cicc_reserved_data_reg_page", {})
+            offset_map = getattr(rcs, "cicc_reserved_data_reg_offset", {})
+            chosen = random.choice(base_regs)
+            with vsc.raw_mode():
+                self.use_sp_as_rs1.rand_mode = False
+                self.rs1_reg.rand_mode = False
+                self.data_page_id.rand_mode = False
+                self.base.rand_mode = False
+                self.locality.rand_mode = False
+            self.use_sp_as_rs1 = 0
+            self.rs1_reg = chosen
+            self.data_page_id = page_map[chosen]
+            self.base = offset_map[chosen]
+            self.locality = locality_e.NARROW
         if(riscv_reg_t.SP in [cfg.reserved_regs, self.reserved_rd]):
             self.use_sp_as_rs1 = 0
             with vsc.raw_mode():
@@ -120,7 +145,6 @@ class riscv_load_store_base_instr_stream(riscv_mem_access_stream):
 
     # Generate each load/store instruction
     def gen_load_store_instr(self):
-        allowed_instr = []
         enable_compressed_load_store = 0
         self.randomize_avail_regs()
         if ((self.rs1_reg in [riscv_reg_t.S0, riscv_reg_t.S1, riscv_reg_t.A0, riscv_reg_t.A1,
@@ -128,11 +152,28 @@ class riscv_load_store_base_instr_stream(riscv_mem_access_stream):
                               riscv_reg_t.SP]) and not(cfg.disable_compressed_instr)):
             enable_compressed_load_store = 1
         for i in range(len(self.addr)):
+            if getattr(rcs, "cicc_simplified_runtime", 0):
+                base_regs = list(getattr(rcs, "cicc_reserved_data_regs", []))
+                base_reg = base_regs[i % len(base_regs)]
+                allowed_instr = [riscv_instr_name_t.LW, riscv_instr_name_t.SW]
+                instr = riscv_instr.get_load_store_instr(allowed_instr)
+                instr.has_rs1 = 1
+                instr.has_imm = 0
+                self.randomize_gpr(instr)
+                instr.rs1 = base_reg
+                instr.imm_str = str(instr.uintToInt(self.offset[i]))
+                instr.process_load_store = 0
+                self.instr_list.append(instr)
+                self.load_store_instr.append(instr)
+                continue
+            allowed_instr = [
+                riscv_instr_name_t.LB,
+                riscv_instr_name_t.LBU,
+                riscv_instr_name_t.SB,
+            ]
             # Assign the allowed load/store instructions based on address alignment
             # This is done separately rather than a constraint to improve the randomization
             # performance
-            allowed_instr.extend(
-                [riscv_instr_name_t.LB, riscv_instr_name_t.LBU, riscv_instr_name_t.SB])
             if not cfg.enable_unaligned_load_store:
                 if (self.addr[i] & 1) == 0:
                     allowed_instr.extend(
@@ -281,6 +322,20 @@ class riscv_load_store_hazard_instr_stream(riscv_load_store_base_instr_stream):
         self.num_mixed_instr.inside(vsc.rangelist(vsc.rng(1, 7)))
 
     def randomize_offset(self):
+        if getattr(rcs, "cicc_simplified_runtime", 0):
+            offsets = list(range(-16, 17, 4))
+            self.offset = [0] * self.num_load_store
+            self.addr = [0] * self.num_load_store
+            rand_num = random.randrange(0, 100)
+            for i in range(self.num_load_store):
+                if (i > 0) and (rand_num < self.hazard_ratio):
+                    self.offset[i] = self.offset[i - 1]
+                    self.addr[i] = self.addr[i - 1]
+                else:
+                    offset_ = random.choice(offsets)
+                    self.offset[i] = offset_
+                    self.addr[i] = self.base + offset_
+            return
         addr_ = vsc.rand_int32_t()
         offset_ = vsc.rand_int32_t()
         self.offset = [0] * self.num_load_store
