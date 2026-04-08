@@ -30,7 +30,7 @@ riscv_instr_name_t unsupported_instr[] = {
     SB, SH,
     JALR,
     SLTI, SLTIU, XORI, ANDI, SLLI, SRLI, SRAI,
-    SLT, SLTU, XOR, SRA,
+    SLT, SLTU,
     NOP, FENCE, FENCE_I,
     ECALL, EBREAK,
     CSRRW, CSRRS, CSRRC, CSRRWI, CSRRSI, CSRRCI

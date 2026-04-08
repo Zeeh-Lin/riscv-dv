@@ -49,8 +49,6 @@ unsupported_instr = [
     riscv_instr_name_t.SRAI,
     riscv_instr_name_t.SLT,
     riscv_instr_name_t.SLTU,
-    riscv_instr_name_t.XOR,
-    riscv_instr_name_t.SRA,
     riscv_instr_name_t.NOP,
     riscv_instr_name_t.FENCE,
     riscv_instr_name_t.FENCE_I,

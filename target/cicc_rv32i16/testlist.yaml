@@ -1,6 +1,6 @@
 - test: cicc_rand_instr_test
   description: >
-    Random instruction test constrained to the CICC RV32I-14 subset.
+    Random instruction test constrained to the CICC supported ISA subset.
   iterations: 1
   gen_test: cicc_rand_instr_test
   gen_opts: >
@@ -26,7 +26,7 @@
 
 - test: cicc_rand_instr_stress_test
   description: >
-    Stress random instruction test constrained to the CICC RV32I-14 subset.
+    Stress random instruction test constrained to the CICC supported ISA subset.
   iterations: 1
   gen_test: cicc_rand_instr_test
   gen_opts: >
