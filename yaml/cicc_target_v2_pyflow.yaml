@@ -1,0 +1,4 @@
+- tool: pyflow
+  sim:
+    cmd: >
+      python3 <cwd>/pygen/pygen_src/test/<test_name>.py <sim_opts>

@@ -54,6 +54,67 @@ class riscv_mem_access_stream(riscv_directed_instr_stream):
         self.load_store_shared_memory = 0
         self.data_page = vsc.list_t(mem_region_t())
 
+    def is_cicc_subset_dmem_anchor_mode(self):
+        return (getattr(rcs, "cicc_subset_runtime_enable", 0) == 1 and
+                getattr(rcs, "cicc_dmem_anchor_mode_enable", 0) == 1)
+
+    def get_cicc_subset_imem_anchor_pc(self):
+        return getattr(rcs, "cicc_subset_imem_anchor_pc", 0x80000004)
+
+    def get_cicc_subset_reg_enum(self, reg):
+        if hasattr(reg, "get_val"):
+            return riscv_reg_t(reg.get_val())
+        if hasattr(reg, "value"):
+            return riscv_reg_t(reg.value)
+        return riscv_reg_t(int(reg))
+
+    def get_cicc_subset_base_regs(self):
+        return [self.get_cicc_subset_reg_enum(reg) for reg in list(cfg.gpr)]
+
+    def get_cicc_subset_anchor_addrs(self):
+        return list(getattr(rcs, "cicc_dmem_anchor_addrs", []))
+
+    def get_cicc_subset_offset_choices(self):
+        return list(getattr(rcs, "cicc_dmem_anchor_offsets", []))
+
+    def get_cicc_subset_anchor_addr(self, gpr):
+        for reg, addr in zip(self.get_cicc_subset_base_regs(),
+                             self.get_cicc_subset_anchor_addrs()):
+            if reg == gpr:
+                return addr
+        logging.critical("Unsupported cicc subset load/store base reg: %s", gpr)
+        sys.exit(1)
+
+    def build_cicc_subset_addi_instr(self, rd, rs1, imm):
+        instr = riscv_instr.get_instr(riscv_instr_name_t.ADDI)
+        rd = self.get_cicc_subset_reg_enum(rd)
+        rs1 = self.get_cicc_subset_reg_enum(rs1)
+        with vsc.raw_mode():
+            instr.rd.set_val(rd.value)
+            instr.rs1.set_val(rs1.value)
+            instr.imm.set_val(imm & 0xffffffff)
+        instr.imm_str = str(imm)
+        instr.process_load_store = 0
+        return instr
+
+    def build_cicc_subset_anchor_init_instr(self, gpr, target_addr):
+        instr = []
+        src = cfg.scratch_reg
+        remaining = target_addr - self.get_cicc_subset_imem_anchor_pc()
+        while True:
+            if remaining > 2047:
+                imm = 2047
+            elif remaining < -2048:
+                imm = -2048
+            else:
+                imm = remaining
+            instr.append(self.build_cicc_subset_addi_instr(gpr, src, imm))
+            remaining -= imm
+            if remaining == 0:
+                break
+            src = gpr
+        return instr
+
     def pre_randomize(self):
         self.data_page.clear()
         if self.load_store_shared_memory:
@@ -66,6 +127,8 @@ class riscv_mem_access_stream(riscv_directed_instr_stream):
 
     # Use "la" instruction to initialize the base regiseter
     def add_rs1_init_la_instr(self, gpr, idx, base = 0):
+        if self.is_cicc_subset_dmem_anchor_mode():
+            return
         la_instr = riscv_pseudo_instr()
         la_instr.pseudo_instr_name = riscv_pseudo_instr_name_t.LA
         la_instr.rd = gpr

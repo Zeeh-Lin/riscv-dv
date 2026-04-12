@@ -56,6 +56,42 @@ class riscv_asm_program_gen:
         self.spf_val = vsc.rand_bit_t(32)
         self.dpf_val = vsc.rand_bit_t(64)
 
+    def is_cicc_subset_runtime(self):
+        return getattr(rcs, "cicc_subset_runtime_enable", 0) == 1
+
+    def is_cicc_dmem_anchor_mode(self):
+        return getattr(rcs, "cicc_dmem_anchor_mode_enable", 0) == 1
+
+    def get_reg_num(self, reg):
+        return reg.value if hasattr(reg, "value") else int(reg)
+
+    def emit_addi_chain(self, instr, rd, rs1, delta):
+        src = rs1
+        remaining = delta
+        while True:
+            if remaining > 2047:
+                imm = 2047
+            elif remaining < -2048:
+                imm = -2048
+            else:
+                imm = remaining
+            instr.append("addi x{}, x{}, {}".format(rd, src, imm))
+            remaining -= imm
+            if remaining == 0:
+                break
+            src = rd
+
+    def get_cicc_subset_init_targets(self):
+        init_targets = [(self.get_reg_num(cfg.sp), 0x80001FC8)]
+        if self.is_cicc_dmem_anchor_mode():
+            init_targets.extend((
+                (self.get_reg_num(cfg.gpr[0]), 0x800010C8),
+                (self.get_reg_num(cfg.gpr[1]), 0x800011C8),
+                (self.get_reg_num(cfg.gpr[2]), 0x800014C8),
+                (self.get_reg_num(cfg.gpr[3]), 0x800015C8),
+            ))
+        return init_targets
+
     # ----------------------------------------------------------------------------------
     # Main function to generate the whole program
     # ----------------------------------------------------------------------------------
@@ -68,7 +104,7 @@ class riscv_asm_program_gen:
         for hart in range(cfg.num_of_harts):
             sub_program_name = []
             self.instr_stream.append(f"h{int(hart)}_start:")
-            if not cfg.bare_program_mode:
+            if not cfg.bare_program_mode and not self.is_cicc_subset_runtime():
                 self.setup_misa()
                 # Create all page tables
                 self.create_page_table(hart)
@@ -80,7 +116,8 @@ class riscv_asm_program_gen:
             If PMP is supported, we want to generate the associated trap handlers and the test_done
             section at the start of the program so we can allow access through the pmpcfg0 CSR
             '''
-            if(rcs.support_pmp and not(cfg.bare_program_mode)):
+            if(rcs.support_pmp and not(cfg.bare_program_mode) and
+                    not self.is_cicc_subset_runtime()):
                 self.gen_trap_handlers(hart)
                 # Ecall handler
                 self.gen_ecall_handler(hart)
@@ -123,8 +160,13 @@ class riscv_asm_program_gen:
             to test_done section at the end of main_program, as the test_done
             will have moved to the beginning of the program
             """
-            self.instr_stream.extend(("{}la x{}, test_done".format(pkg_ins.indent, cfg.scratch_reg),
-                                      "{}jalr x0, x{}, 0".format(pkg_ins.indent, cfg.scratch_reg)))
+            if self.is_cicc_subset_runtime():
+                self.instr_stream.append("{}jal x0, test_done".format(pkg_ins.indent))
+            else:
+                self.instr_stream.extend(("{}la x{}, test_done".format(pkg_ins.indent,
+                                                                       cfg.scratch_reg),
+                                          "{}jalr x0, x{}, 0".format(pkg_ins.indent,
+                                                                     cfg.scratch_reg)))
             # Test done section
             # If PMP isn't supported, generate this in the normal location
             if(hart == 0 and not(rcs.support_pmp)):
@@ -134,7 +176,7 @@ class riscv_asm_program_gen:
             logging.info("Main/sub program generation...done")
             # program end
             self.gen_program_end(hart)
-            if not cfg.bare_program_mode:
+            if not cfg.bare_program_mode and not self.is_cicc_subset_runtime():
                 # Generate debug rom section
                 if rcs.support_debug_mode:
                     self.gen_debug_rom(hart)
@@ -150,7 +192,7 @@ class riscv_asm_program_gen:
                     self.gen_data_page(hart, amo = 1)
             # Stack section
             self.gen_stack_section(hart)
-            if not cfg.bare_program_mode:
+            if not cfg.bare_program_mode and not self.is_cicc_subset_runtime():
                 # Generate kernel program/data/stack section
                 self.gen_kernel_sections(hart)
                 # Page table
@@ -264,6 +306,13 @@ class riscv_asm_program_gen:
         self.instr_stream.extend((".include \"user_define.h\"", ".globl _start", ".section .text"))
         if cfg.disable_compressed_instr:
             self.instr_stream.append(".option norvc;")
+        if self.is_cicc_subset_runtime():
+            if cfg.num_of_harts != 1:
+                logging.critical("cicc_rv32i_subset shared scaffold only supports one hart")
+                sys.exit(1)
+            header_string.append("jal x{}, h0_start".format(self.get_reg_num(cfg.scratch_reg)))
+            self.gen_section("_start", header_string)
+            return
         header_string.extend((".include \"user_init.s\"",
                               "csrr x5, {}".format(hex(privileged_reg_t.MHARTID))))
         for hart in range(cfg.num_of_harts):
@@ -275,6 +324,8 @@ class riscv_asm_program_gen:
                                       "jalr x0, x{}, 0".format(cfg.scratch_reg)))
 
     def gen_program_end(self, hart):
+        if self.is_cicc_subset_runtime():
+            return
         if hart == 0:
             # Use write_tohost to terminate spike simulation
             self.gen_section("write_tohost", ["sw gp, tohost, t5"])
@@ -336,6 +387,14 @@ class riscv_asm_program_gen:
     def gen_init_section(self, hart):
         init_string = pkg_ins.format_string(pkg_ins.get_label("init:", hart), pkg_ins.LABEL_STR_LEN)
         self.instr_stream.append(init_string)
+        if self.is_cicc_subset_runtime():
+            imem_anchor = 0x80000004
+            anchor_reg = self.get_reg_num(cfg.scratch_reg)
+            for reg_num, target_addr in self.get_cicc_subset_init_targets():
+                self.emit_addi_chain(self.instr_stream, reg_num, anchor_reg,
+                                     target_addr - imem_anchor)
+            self.instr_stream.append("{}jal x0, main".format(pkg_ins.indent))
+            return
         if cfg.enable_floating_point:
             self.init_floating_point_gpr()
         self.init_gpr()
@@ -544,12 +603,14 @@ class riscv_asm_program_gen:
             (1, lambda: self.get_rng(62, pkg_ins.DOUBLE_PRECISION_FRACTION_BITS, 64, 1))])
         return self.dpf_val
 
-    # Generate "test_done" section, test is finished by an ECALL instruction
-    # The ECALL trap handler will handle the clean up procedure before finishing the test.
+    # Generate "test_done" section.
 
     def gen_test_done(self):
-        self.instr_stream.extend((pkg_ins.format_string("test_done:", pkg_ins.LABEL_STR_LEN),
-                                  pkg_ins.indent + "li gp, 1"))
+        self.instr_stream.append(pkg_ins.format_string("test_done:", pkg_ins.LABEL_STR_LEN))
+        if self.is_cicc_subset_runtime():
+            self.instr_stream.append(pkg_ins.indent + "ebreak")
+            return
+        self.instr_stream.append(pkg_ins.indent + "li gp, 1")
         if cfg.bare_program_mode:
             self.instr_stream.append(pkg_ins.indent + "j write_tohost")
         else:
