@@ -332,14 +332,17 @@ def do_simulate(sim_cmd, simulator, test_list, cwd, sim_opts, seed_gen,
                     cmd = re.sub("<test_id>", test_id, cmd)
                     sim_seed[test_id] = str(rand_seed)
                     if "gen_opts" in test:
+                        gen_opts = test['gen_opts']
                         if simulator == "pyflow":
-                            test['gen_opts'] = re.sub("\+", "--",
-                                                      test['gen_opts'])
-                            cmd += test['gen_opts']
-                        else:
-                            cmd += test['gen_opts']
+                            gen_opts = re.sub("\+", "--", gen_opts)
+                        gen_opts = gen_opts.strip()
+                        if gen_opts:
+                            cmd += " " + gen_opts
                     if not re.search("c", isa):
-                        cmd += "+disable_compressed_instr=1 "
+                        if simulator == "pyflow":
+                            cmd += " --disable_compressed_instr=1"
+                        else:
+                            cmd += " +disable_compressed_instr=1 "
                     if lsf_cmd:
                         cmd_list.append(cmd)
                     else:
