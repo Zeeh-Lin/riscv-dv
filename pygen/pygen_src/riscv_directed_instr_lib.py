@@ -11,6 +11,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 """
 
 import sys
+import copy
 import random
 import logging
 import vsc
@@ -54,12 +55,25 @@ class riscv_mem_access_stream(riscv_directed_instr_stream):
         self.load_store_shared_memory = 0
         self.data_page = vsc.list_t(mem_region_t())
 
+    def is_cicc_subset_runtime(self):
+        return getattr(rcs, "cicc_subset_runtime_enable", 0) == 1
+
     def is_cicc_subset_dmem_anchor_mode(self):
-        return (getattr(rcs, "cicc_subset_runtime_enable", 0) == 1 and
+        return (self.is_cicc_subset_runtime() and
                 getattr(rcs, "cicc_dmem_anchor_mode_enable", 0) == 1)
 
     def get_cicc_subset_imem_anchor_pc(self):
         return getattr(rcs, "cicc_subset_imem_anchor_pc", 0x80000004)
+
+    def get_cicc_subset_dmem_base(self):
+        return getattr(rcs, "cicc_subset_dmem_base", 0x80001000)
+
+    def get_cicc_subset_int(self, value):
+        if hasattr(value, "get_val"):
+            return int(value.get_val())
+        if hasattr(value, "value"):
+            return int(value.value)
+        return int(value)
 
     def get_cicc_subset_reg_enum(self, reg):
         if hasattr(reg, "get_val"):
@@ -67,6 +81,43 @@ class riscv_mem_access_stream(riscv_directed_instr_stream):
         if hasattr(reg, "value"):
             return riscv_reg_t(reg.value)
         return riscv_reg_t(int(reg))
+
+    def get_cicc_subset_user_stack_size(self):
+        return self.get_cicc_subset_int(cfg.stack_len) * (rcs.XLEN // 8)
+
+    def get_cicc_subset_user_mem_layout(self):
+        addr = self.get_cicc_subset_dmem_base()
+        layout = []
+        for region in list(cfg.mem_region):
+            size = self.get_cicc_subset_int(region.size_in_bytes)
+            layout.append({
+                "name": region.name,
+                "start": addr,
+                "end": addr + size,
+            })
+            addr += size
+        stack_size = self.get_cicc_subset_user_stack_size()
+        layout.append({
+            "name": "user_stack",
+            "start": addr,
+            "end": addr + stack_size,
+        })
+        return layout
+
+    def get_cicc_subset_user_data_page_abs_base(self, idx):
+        layout = self.get_cicc_subset_user_mem_layout()
+        idx = self.get_cicc_subset_int(idx)
+        if idx < 0 or idx >= len(cfg.mem_region):
+            logging.critical("Unsupported cicc subset data page id: %s", idx)
+            sys.exit(1)
+        return layout[idx]["start"]
+
+    def is_cicc_subset_user_data_ea_legal(self, addr):
+        addr = self.get_cicc_subset_int(addr)
+        for region in self.get_cicc_subset_user_mem_layout()[:len(cfg.mem_region)]:
+            if region["start"] <= addr < region["end"]:
+                return True
+        return False
 
     def get_cicc_subset_base_regs(self):
         return [self.get_cicc_subset_reg_enum(reg) for reg in list(cfg.gpr)]
@@ -86,12 +137,12 @@ class riscv_mem_access_stream(riscv_directed_instr_stream):
         sys.exit(1)
 
     def build_cicc_subset_addi_instr(self, rd, rs1, imm):
-        instr = riscv_instr.get_instr(riscv_instr_name_t.ADDI)
+        instr = copy.deepcopy(riscv_instr.instr_template[riscv_instr_name_t.ADDI])
         rd = self.get_cicc_subset_reg_enum(rd)
         rs1 = self.get_cicc_subset_reg_enum(rs1)
+        instr.rd = rd
+        instr.rs1 = rs1
         with vsc.raw_mode():
-            instr.rd.set_val(rd.value)
-            instr.rs1.set_val(rs1.value)
             instr.imm.set_val(imm & 0xffffffff)
         instr.imm_str = str(imm)
         instr.process_load_store = 0
@@ -141,6 +192,18 @@ class riscv_mem_access_stream(riscv_directed_instr_stream):
             la_instr.imm_str = "{}{}+{}".format(pkg_ins.hart_prefix(self.hart),
                                                 cfg.mem_region[idx].name, base)
         self.instr_list.insert(0, la_instr)
+
+    def add_rs1_init_instr(self, gpr, idx, base = 0):
+        if self.is_cicc_subset_dmem_anchor_mode():
+            return
+        if (self.is_cicc_subset_runtime() and
+                not self.load_store_shared_memory and not self.kernel_mode):
+            target_addr = self.get_cicc_subset_user_data_page_abs_base(idx) + \
+                self.get_cicc_subset_int(base)
+            self.instr_list = self.build_cicc_subset_anchor_init_instr(
+                gpr, target_addr) + self.instr_list
+            return
+        self.add_rs1_init_la_instr(gpr, idx, base)
 
     # Insert some other instructions to mix with mem_access instruction
     def add_mixed_instr(self, instr_cnt):

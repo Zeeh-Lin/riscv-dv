@@ -65,8 +65,12 @@ supported_isa = [riscv_instr_group_t.RV32I]
 # MARK: Target-local bring-up flag for subset-safe shared runtime scaffold
 cicc_subset_runtime_enable = 1
 
+# MARK: CICC runtime data memory base aligned with soc_8000 linker/platform layout
+cicc_subset_dmem_base = 0x80001000
+
 # MARK: Target-local flag for first-stage controlled DMem base/offset bring-up
-cicc_dmem_anchor_mode_enable = 1
+# Keep the anchor path available as a fallback, but generic load/store is now the default path.
+cicc_dmem_anchor_mode_enable = 0
 
 # MARK: Subset-safe scaffold anchors used by phase-1 load/store bring-up
 cicc_subset_imem_anchor_pc = 0x80000004

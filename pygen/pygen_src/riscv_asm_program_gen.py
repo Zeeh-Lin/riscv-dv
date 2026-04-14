@@ -98,7 +98,8 @@ class riscv_asm_program_gen:
             self.get_reg_num(cfg.scratch_reg),
             self.get_reg_num(cfg.sp),
         }
-        preserved_regs.update(self.get_reg_num(reg) for reg in list(cfg.gpr))
+        if self.is_cicc_dmem_anchor_mode():
+            preserved_regs.update(self.get_reg_num(reg) for reg in list(cfg.gpr))
         return preserved_regs
 
     def emit_cicc_subset_zero_init(self, instr):
