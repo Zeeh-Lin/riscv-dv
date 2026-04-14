@@ -142,7 +142,8 @@ class riscv_instr_gen_config:
         # pmp_cfg = riscv_pmp_cfg  # TODO
 
         # Stack section word length
-        self.stack_len = 5000
+        # MARK: allocate 64 words * 32 bits/word = 2048 bits in CICC
+        self.stack_len = 64
 
         # -----------------------------------------------------------------------------
         # User space memory region and stack setting
@@ -150,8 +151,9 @@ class riscv_instr_gen_config:
         self.mem_region = vsc.list_t(mem_region_t())
         self.amo_region = vsc.list_t(mem_region_t())
         self.s_mem_region = vsc.list_t(mem_region_t())
-        self.mem_region.extend([mem_region_t(name = "region_0", size_in_bytes = 4096, xwr = 8),
-                                mem_region_t(name = "region_1", size_in_bytes = 4096, xwr = 8)])
+        # MARK: allocate 2 regions * 1024 bits/region = 2048 bits in CICC
+        self.mem_region.extend([mem_region_t(name = "region_0", size_in_bytes = 1024, xwr = 8),
+                                mem_region_t(name = "region_1", size_in_bytes = 1024, xwr = 8)])
         self.amo_region.extend([mem_region_t(name = "amo_0", size_in_bytes = 64, xwr = 8)])
         self.s_mem_region.extend([mem_region_t(name = "s_region_0", size_in_bytes = 4096, xwr = 8),
                                   mem_region_t(name = "s_region_1", size_in_bytes = 4096, xwr = 8)])

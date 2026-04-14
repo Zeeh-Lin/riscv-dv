@@ -92,6 +92,22 @@ class riscv_asm_program_gen:
             ))
         return init_targets
 
+    def get_cicc_subset_preserved_regs(self):
+        preserved_regs = {
+            0,
+            self.get_reg_num(cfg.scratch_reg),
+            self.get_reg_num(cfg.sp),
+        }
+        preserved_regs.update(self.get_reg_num(reg) for reg in list(cfg.gpr))
+        return preserved_regs
+
+    def emit_cicc_subset_zero_init(self, instr):
+        preserved_regs = self.get_cicc_subset_preserved_regs()
+        for reg_num in range(1, rcs.NUM_GPR):
+            if reg_num in preserved_regs:
+                continue
+            instr.append("addi x{}, x0, 0".format(reg_num))
+
     # ----------------------------------------------------------------------------------
     # Main function to generate the whole program
     # ----------------------------------------------------------------------------------
@@ -183,7 +199,8 @@ class riscv_asm_program_gen:
                 self.gen_section(pkg_ins.hart_prefix(hart) + "instr_end", ["nop"])
         for hart in range(cfg.num_of_harts):
             # Starting point of data section
-            self.gen_data_page_begin(hart)
+            # MARK: no .data section in CICC
+            # self.gen_data_page_begin(hart)
             if not cfg.no_data_page:
                 # User data section
                 self.gen_data_page(hart)
@@ -393,6 +410,7 @@ class riscv_asm_program_gen:
             for reg_num, target_addr in self.get_cicc_subset_init_targets():
                 self.emit_addi_chain(self.instr_stream, reg_num, anchor_reg,
                                      target_addr - imem_anchor)
+            self.emit_cicc_subset_zero_init(self.instr_stream)
             self.instr_stream.append("{}jal x0, main".format(pkg_ins.indent))
             return
         if cfg.enable_floating_point:
