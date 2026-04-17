@@ -84,21 +84,22 @@ class riscv_loop_instr(riscv_rand_instr_stream):
         self.branch_type.size == self.num_of_nested_loop
         with vsc.foreach(self.branch_type, idx = True) as i:
             with vsc.if_then(cfg.disable_compressed_instr == 0):
-                self.branch_type[i].inside(vsc.rangelist(riscv_instr_name_t.C_BNEZ,
-                                                         riscv_instr_name_t.C_BEQZ,
+                # MARK: remove unsupported instructions in CICC
+                self.branch_type[i].inside(vsc.rangelist(# riscv_instr_name_t.C_BNEZ,
+                                                         # riscv_instr_name_t.C_BEQZ,
                                                          riscv_instr_name_t.BEQ,
-                                                         riscv_instr_name_t.BNE,
-                                                         riscv_instr_name_t.BLTU,
-                                                         riscv_instr_name_t.BLT,
-                                                         riscv_instr_name_t.BGEU,
-                                                         riscv_instr_name_t.BGE))
+                                                         riscv_instr_name_t.BNE))
+                                                         # riscv_instr_name_t.BLTU,
+                                                         # riscv_instr_name_t.BLT,
+                                                         # riscv_instr_name_t.BGEU,
+                                                         # riscv_instr_name_t.BGE))
             with vsc.else_then():
                 self.branch_type[i].inside(vsc.rangelist(riscv_instr_name_t.BEQ,
-                                                         riscv_instr_name_t.BNE,
-                                                         riscv_instr_name_t.BLTU,
-                                                         riscv_instr_name_t.BLT,
-                                                         riscv_instr_name_t.BGEU,
-                                                         riscv_instr_name_t.BGE))
+                                                         riscv_instr_name_t.BNE))
+                                                         # riscv_instr_name_t.BLTU,
+                                                         # riscv_instr_name_t.BLT,
+                                                         # riscv_instr_name_t.BGEU,
+                                                         # riscv_instr_name_t.BGE))
         with vsc.foreach(self.loop_init_val, idx = True) as i:
             with vsc.if_then(self.branch_type[i].inside(vsc.rangelist(riscv_instr_name_t.C_BNEZ,
                                                                       riscv_instr_name_t.C_BEQZ))):

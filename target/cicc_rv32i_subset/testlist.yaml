@@ -1,14 +1,123 @@
-- test: cicc_rv32i_subset_rand_instr_bringup_test
+- test: cicc_arithmetic_basic_test
   description: >
-    First-stage bring-up random test for the cicc_rv32i_subset target.
+    Arithmetic instruction test, no load/store/branch instructions
   iterations: 1
-  gen_test: cicc_rv32i_subset_rand_instr_test
   gen_opts: >
-    +instr_cnt=500
+    +instr_cnt=800
     +num_of_sub_program=0
     +no_ebreak=1
     +no_fence=1
     +boot_mode=m
     +no_csr_instr=1
     +enable_misaligned_instr=0
+  gen_test: cicc_instr_base_test
+  rtl_test: core_base_test
+
+- test: cicc_rand_instr_test
+  description: >
+    Random instruction stress test
+  iterations: 2
+  gen_test: cicc_instr_base_test
+  gen_opts: >
+    +instr_cnt=800
+    +num_of_sub_program=5
+    +no_ebreak=1
+    +no_fence=1
+    +boot_mode=m
+    +no_csr_instr=1
+    +enable_misaligned_instr=0
+    +directed_instr_0=riscv_load_store_rand_instr_stream,4
+    +directed_instr_1=riscv_loop_instr,4
+    +directed_instr_2=riscv_hazard_instr_stream,4
+    +directed_instr_3=riscv_load_store_hazard_instr_stream,4
+    +directed_instr_4=riscv_multi_page_load_store_instr_stream,4
+    +directed_instr_5=riscv_mem_region_stress_test,4
+    +directed_instr_6=riscv_jal_instr,4
+  rtl_test: core_base_test
+
+- test: cicc_jump_stress_test
+  description: >
+    Stress back-to-back jump instruction test
+  iterations: 2
+  gen_test: cicc_instr_base_test
+  gen_opts: >
+    +instr_cnt=800
+    +num_of_sub_program=5
+    +no_ebreak=1
+    +no_fence=1
+    +boot_mode=m
+    +no_csr_instr=1
+    +enable_misaligned_instr=0
+    +directed_instr_1=riscv_jal_instr,20
+  rtl_test: core_base_test
+
+- test: cicc_loop_test
+  description: >
+    Random instruction stress test
+  iterations: 2
+  gen_test: cicc_instr_base_test
+  gen_opts: >
+    +instr_cnt=10000
+    +num_of_sub_program=5
+    +no_ebreak=1
+    +no_fence=1
+    +boot_mode=m
+    +no_csr_instr=1
+    +enable_misaligned_instr=0
+    +directed_instr_1=riscv_loop_instr,20
+  rtl_test: core_base_test
+
+- test: cicc_rand_jump_test
+  description: >
+    Jump among large number of sub-programs, stress testing iTLB operations.
+  iterations: 2
+  gen_test: cicc_instr_base_test
+  gen_opts: >
+    +instr_cnt=10000
+    +num_of_sub_program=10
+    +no_ebreak=1
+    +no_fence=1
+    +boot_mode=m
+    +no_csr_instr=1
+    +enable_misaligned_instr=0
+    +directed_instr_0=riscv_load_store_rand_instr_stream,8
+  rtl_test: core_base_test
+
+- test: cicc_illegal_instr_test
+  description: >
+    Illegal instruction test, verify the processor can detect illegal
+    instruction and handle corresponding exception properly. An exception
+    handling routine is designed to resume execution after illegal
+    instruction exception.
+  iterations: 2
+  gen_test: riscv_rand_instr_test
+  gen_opts: >
+    +illegal_instr_ratio=5
+    +no_ebreak=1
+    +no_fence=1
+    +boot_mode=m
+    +no_csr_instr=1
+    +enable_misaligned_instr=0
+  rtl_test: core_base_test
+
+- test: cicc_unaligned_load_store_test
+  description: >
+    Unaligned load/store test
+  iterations: 1
+  gen_test: cicc_instr_base_test
+  gcc_opts: >
+    -mno-strict-align
+  gen_opts: >
+    +instr_cnt=6000
+    +num_of_sub_program=5
+    +no_ebreak=1
+    +no_fence=1
+    +boot_mode=m
+    +no_csr_instr=1
+    +enable_misaligned_instr=0
+    +directed_instr_0=riscv_load_store_rand_instr_stream,20
+    +directed_instr_1=riscv_load_store_hazard_instr_stream,20
+    +directed_instr_2=riscv_multi_page_load_store_instr_stream,5
+    +directed_instr_3=riscv_mem_region_stress_test,5
+    +enable_unaligned_load_store=1
   rtl_test: core_base_test
